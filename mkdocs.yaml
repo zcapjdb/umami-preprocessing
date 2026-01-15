@@ -9,8 +9,6 @@ edit_uri: "tree/main/docs"
 
 theme:
   name: material
-  #logo: assets/salt.png
-  #favicon: assets/salt.png
   features:
     - content.code.copy
 
@@ -18,6 +16,7 @@ nav:
   - Introduction: index.md
   - Setup: setup.md
   - Sampling methods: sampling.md
+  - Reweighting: reweighting.md
   - Configuration: configuration.md
   - Run: run.md
   - Umami integration: umami_int.md

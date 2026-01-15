@@ -1,35 +1,82 @@
 from __future__ import annotations
 
 import logging as log
+from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
 import yaml
 from ftag.hdf5 import H5Reader
 
-from upp.logger import ProgressBar
+from upp.utils.logger import ProgressBar
+
+if TYPE_CHECKING:  # pragma: no cover
+    from upp.classes.preprocessing_config import PreprocessingConfig
 
 
 class Normalisation:
-    def __init__(self, config):
-        self.ppc = config
+    """Normalisation class to get the scaling/shifting of the variables used in training."""
+
+    def __init__(self, config: PreprocessingConfig):
+        self.config = config
         self.components = config.components
         self.variables = config.variables
-        self.jets_name = self.ppc.jets_name
+        self.jets_name = self.config.jets_name
         self.num_jets = config.num_jets_estimate_norm
         self.norm_fname = config.out_dir / config.config.get("norm_fname", "norm_dict.yaml")
         self.class_fname = config.out_dir / config.config.get("class_fname", "class_dict.yaml")
 
     @staticmethod
-    def combine_mean_std(mean_A, mean_B, std_A, std_B, num_A, num_B):
+    def combine_mean_std(
+        mean_A: float,
+        mean_B: float,
+        std_A: float,
+        std_B: float,
+        num_A: int,
+        num_B: int,
+    ) -> tuple[float, float]:
+        """Combine the mean and the standard deviation of two variables.
+
+        Parameters
+        ----------
+        mean_A : float
+            Mean of the variable A
+        mean_B : float
+            Mean of the variable B
+        std_A : float
+            Standard deviation of the variable A
+        std_B : float
+            Standard deviation of the variable B
+        num_A : int
+            Number of jets for variable A
+        num_B : int
+            Number of jets for variable B
+
+        Returns
+        -------
+        tuple[float, float]
+            Combined mean and combined standard deviation
+        """
         combined_mean = np.average([mean_A, mean_B], weights=[num_A, num_B])
         u_A = (mean_A - combined_mean) ** 2 + std_A**2
         u_B = (mean_B - combined_mean) ** 2 + std_B**2
         combined_std = np.sqrt((u_A * num_A + u_B * num_B) / (num_A + num_B))
         return float(combined_mean), float(combined_std)
 
-    def get_norm_dict(self, batch):
-        norm_dict = {k: {} for k in self.variables}
+    def get_norm_dict(self, batch: dict) -> tuple[dict, int]:
+        """Get the normalisation dict with the mean and standard deviation for the given jets.
+
+        Parameters
+        ----------
+        batch : dict
+            Dict with the jets and all variables
+
+        Returns
+        -------
+        tuple[dict, int]
+            Normalisation dict and the number of jets used to calculate it
+        """
+        norm_dict: dict[str, dict] = {k: {} for k in self.variables}
         for name, array in batch.items():
             if name != self.variables.jets_name:
                 array = array[array["valid"]]
@@ -41,8 +88,26 @@ class Normalisation:
                 norm_dict[name][var] = {"mean": mean, "std": std}
         return norm_dict, len(batch[self.variables.jets_name])
 
-    def combine_norm_dict(self, norm_A, norm_B, num_A, num_B):
-        combined = {}
+    def combine_norm_dict(self, norm_A: dict, norm_B: dict, num_A: int, num_B: int) -> dict:
+        """Combine two normalisation dicts into one.
+
+        Parameters
+        ----------
+        norm_A : dict
+            Normalisation dict A
+        norm_B : dict
+            Normalisation dict B
+        num_A : int
+            Number of jets used to calculate normalisation dict A
+        num_B : int
+            Number of jets used to calculate normalisation dict B
+
+        Returns
+        -------
+        dict
+            Combined normalisation dict of A and B
+        """
+        combined: dict[str, dict] = {}
         for name in norm_A:
             dict_A = norm_A[name]
             dict_B = norm_B[name]
@@ -61,9 +126,27 @@ class Normalisation:
 
         return combined
 
-    def get_class_dict(self, batch):
-        ignore = ["VertexIndex", "ftagTruthParentBarcode", "barcode", "eventNumber", "jetFoldHash"]
-        class_dict = {k: {} for k in self.variables}
+    def get_class_dict(self, batch: dict) -> dict:
+        """Get the class dict for the given jets.
+
+        Parameters
+        ----------
+        batch : dict
+            Dict with the jets and their variables
+
+        Returns
+        -------
+        dict
+            Class dict
+        """
+        ignore = [
+            "VertexIndex",
+            "ftagTruthParentBarcode",
+            "barcode",
+            "eventNumber",
+            "jetFoldHash",
+        ]
+        class_dict: dict[str, dict] = {k: {} for k in self.variables}
         for name, array in batch.items():
             if name != self.variables.jets_name:
                 array = array[array["valid"]]
@@ -79,7 +162,26 @@ class Normalisation:
         return class_dict
 
     @staticmethod
-    def combine_class_dict(class_dict_A, class_dict_B):
+    def combine_class_dict(class_dict_A: dict, class_dict_B: dict) -> dict:
+        """Combine two class dicts A and B into one.
+
+        Parameters
+        ----------
+        class_dict_A : dict
+            Class dict A
+        class_dict_B : dict
+            Class dict B
+
+        Returns
+        -------
+        dict
+            Combined class dict
+
+        Raises
+        ------
+        ValueError
+            If class dict A has arrays of different lengths for the same variable
+        """
         for name, var in class_dict_B.items():
             for v, stats in var.items():
                 labels, counts = stats
@@ -89,12 +191,19 @@ class Normalisation:
                             "Class dict A has arrays of different lengths for the same"
                             " variable. This should not happen."
                         )
-                    counts_A = dict(zip(*class_dict_A[name][v]))
+                    counts_A = dict(zip(*class_dict_A[name][v], strict=False))
                     counts[i] += counts_A.get(label, 0)
                 var[v] = (labels, counts)
         return class_dict_B
 
-    def write_norm_dict(self, norm_dict):
+    def write_norm_dict(self, norm_dict: dict) -> None:
+        """Write the normalisation dict to a yaml file.
+
+        Parameters
+        ----------
+        norm_dict : dict
+            Normalisation dict which is to be saved
+        """
         for norms in norm_dict.values():
             for var, tf in norms.items():
                 assert not np.isinf(tf["mean"]), f"{var} mean is not finite"
@@ -105,7 +214,14 @@ class Normalisation:
         with open(self.norm_fname, "w") as file:
             yaml.dump(norm_dict, file, sort_keys=False)
 
-    def write_class_dict(self, class_dict):
+    def write_class_dict(self, class_dict: dict) -> None:
+        """Write the class dict to a yaml file.
+
+        Parameters
+        ----------
+        class_dict : dict
+            Class dict which is to be saved
+        """
         for labels in class_dict.values():
             for v, (_, counts) in labels.items():
                 weights = sum(counts) / counts
@@ -114,14 +230,27 @@ class Normalisation:
             yaml.dump(class_dict, file, sort_keys=False)
 
     def run(self):
+        """Run the normalisation calculation."""
         title = " Computing Normalisations "
         log.info(f"[bold green]{title:-^100}")
+        if self.config.rw_config is not None:
+            fname = str(self.config.out_fname).replace(".h5", "_vds.h5")
 
-        # setup reader
+        # Get the correct output names if multiple output files were written
+        elif self.config.num_jets_per_output_file:
+            fname = self.config.out_fname.parent / f"{self.config.out_fname.stem}*.h5"
+
+        else:
+            fname = self.config.out_fname
+
+        # Setup reader
         reader = H5Reader(
-            self.ppc.out_fname, self.ppc.batch_size, precision="full", jets_name=self.jets_name
+            fname,
+            self.config.batch_size,
+            precision="full",
+            jets_name=self.jets_name,
         )
-        log.debug(f"Setup reader at: {self.ppc.out_fname}")
+        log.debug(f"Setup reader at: {fname}")
 
         norm_dict = None
         class_dict = None

@@ -13,26 +13,36 @@ jets:
     - HadronGhostTruthLabelPt
     - HadronGhostTruthLabelLxy
     - HadronGhostTruthLabelDR
+    - HadronGhostInitialTruthLabelID
+    - HadronGhostInitialTruthLabelPdgId
+    - HadronGhostInitialExtendedTruthLabelID
+    - PartonExtendedTruthLabelID
     - pt
     - eta
     - mass
-    - n_tracks
+    - n_tracks_ghost
     - n_truth_promptLepton
     - eventNumber
     - jetFoldHash
     - ptFromTruthJet
     - matchedToTruthJet
+    - ptFromTruthDressedWZJet
+    - matchedToTruthDressedWZJet
+    - decayModeFromTruthTaus
+    - matchedToTruthTaus
+    - pt_visFromTruthTaus
+    - matchedToTauJet
+    - ptFinalCalibFromTauJet
 
-
-tracks:
+tracks_ghost:
   inputs:
     - d0
     - z0SinTheta
     - dphi
     - deta
     - qOverP
-    - IP3D_signed_d0_significance
-    - IP3D_signed_z0_significance
+    - lifetimeSignedD0Significance
+    - lifetimeSignedZ0SinThetaSignificance
     - phiUncertainty
     - thetaUncertainty
     - qOverPUncertainty
@@ -53,12 +63,50 @@ tracks:
   labels:
     - ftagTruthOriginLabel
     - ftagTruthTypeLabel
+    - ftagTruthSourceLabel
     - ftagTruthVertexIndex
 
-flow:
- inputs:
-   - pt
-   - energy
-   - deta
-   - dphi
-   - isCharged
+flows:
+  inputs:
+    - pt
+    - energy
+    - deta
+    - dphi
+    - isCharged
+
+electrons:
+  inputs:
+    - pt
+    - ptfrac
+    - ptrel
+    - dr
+    - abs_eta
+    - eta
+    - phi
+    - ftag_et
+    - qOverP
+    - d0RelativeToBeamspot
+    - d0RelativeToBeamspotSignificance
+    - ftag_ptVarCone30OverPt
+    - numberOfPixelHits
+    - numberOfSCTHitsInclDead
+    - ftag_deltaPOverP
+    - eProbabilityHT
+    - deltaEta1
+    - deltaPhiRescaled2
+    - ftag_energyOverP
+    - Rhad
+    - Rhad1
+    - Eratio
+    - weta2
+    - Rphi
+    - Reta
+    - wtots1
+    - f1
+    - f3
+
+  labels:
+    - ftagTruthOriginLabel
+    - ftagTruthTypeLabel
+    - ftagTruthSourceLabel
+    - ftagTruthVertexIndex
